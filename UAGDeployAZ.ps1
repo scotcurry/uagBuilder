@@ -173,18 +173,20 @@ Function Create-Virtual-Machine {
     $credentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $adminUserName, $securePassword
     $virtualNetwork = Get-AzVirtualNetwork -Name $virtualNetworkName
     $securityGroup = Get-AzNetworkSecurityGroup -Name $securityGroupName
-    $publicIPAddress = Get-AzPublicIpAddress -Name publicIPName
+    $publicIPAddress = Get-AzPublicIpAddress -Name $publicIPName
     $nicCard = Get-AzNetworkInterface -Name "eth0"
 
     $diskGUID = New-Guid
-    $diskURI = Get-Disk-Uri
+    $sourceDiskURI = Get-Disk-Uri
     $diskName = "OSDisk-" + $diskGUID
+    $distinationURI = $pathString.Substring(0, $pathString.LastIndexOf("/")) + "/osDisk.vhd"
     $virtualMachineConfig = New-AzVMConfig -VMName $vmName -VMSize $vmSize
-    $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -Name $diskName -VhdUri $diskURI -SourceImageUri $diskURI `
-                                -Linux -DiskSizeInGB 40 -CreateOption FromImage
+    $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -Name $diskName -VhdUri $distinationURI -SourceImageUri $sourceDiskURI `
+                                -Linux -CreateOption FromImage
+    $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Linux -ComputerName $vmName -Credential $credentials
+    $virtualMachineConfig = Add-AzVMNetworkInterface -VM $virtualMachineConfig -Id $nicCard.Id
 
-    $virualMachine = New-AzVM -ResourceGroupName $resourceGroupName -Location $location -VirtualNetworkName $virtualNetwork.Name `
-                        -SecurityGroupName $securityGroup.Name -Name $vmName -Credential $credentials -PublicIpAddressName $publicIPAddress `
+    $virualMachine = New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroupName -Location $location
                         
 }
 
