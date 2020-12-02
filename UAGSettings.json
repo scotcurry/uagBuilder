@@ -1,0 +1,30 @@
+﻿{
+	"uagName": "CurrywareUAG",
+	"deploymentOption": "twonic",
+	"subscriptionID": "d8a86ded-b25e-48ff-873a-bf101b435edd",
+	"resourceGroupName": "TunnelGroup",
+	"location": "northcentralus",
+	"storageAccountName": "cwuagstorageaccount",
+	"imageURI": "https://cwuagstorageaccount.blob.core.windows.net/tunnelcontainer/euc-unified-access-gateway-20.09.1.0-17167500_OVF10.vhd",
+	"diskStorageContainer": "tunnelcontainer",
+	"vmSize": "Standard_A2_v2",
+	"virtualNetworkName": "UAGNetwork",
+    "securityGroupName": "UAG-Security-Group",
+    "adminUserName": "UAGAdmin",
+    "adminPassword": "AirWatch1",
+    "publicIPName": "UAGIPAddress",
+    "subnetName": "UAGSubnet",
+    "publicDNSPrefix": "curryware-uag",
+    "uagVHDFileName": "euc-unified-access-gateway-20.09.1.0-17167500_OVF10.vhd",
+	"nicSettings": [{
+			"name": "eth0",
+			"subnetName": "subnet1",
+			"publicIPAddressName": "UAGPublicIP",
+			"networkSecurityGroup": "CurrywareSG"
+		},
+		{
+			"name": "eth1",
+			"subnetName": "subnet2"
+		}
+	]
+}
