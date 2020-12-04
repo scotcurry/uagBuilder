@@ -1,4 +1,4 @@
-<#
+﻿<#
     This is a set of functions -- Search for Main() to see where the code actually starts.
 #>
 
@@ -17,10 +17,16 @@ Function Write_Error_Message {
 }
 
 # This function provides the Information strings.  Things like where you are in the process.
-Function Write-Info-Message {
+Function Write-Warning-Message {
 
     Param ($message)
 	Write-Host $message -foregroundcolor Yellow -backgroundcolor Black
+}
+
+Function Write-Info-Message {
+    
+    Param($message)
+    Write-Host $message -ForegroundColor Green -BackgroundColor Black
 }
 
 # This code just checks to make sure that all of the Azure Powershell Modules are on the system.
@@ -62,6 +68,19 @@ Function Connect_To_Azure {
     Write-Info-Message "Connected to Azure Tenant $tenantID"
 }
 
+Function Upload-VHD {
+
+    $jsonPath = Get_Settings
+    $settingsContent = Get-Content -Path $jsonPath | Out-String 
+    $settings = ConvertFrom-Json -InputObject $settingsContent
+
+    $sourceFile = $settings.uagLocalFile
+    $destinationFile = $settings.imageURI
+    $resourceGroup = $settings.resourceGroupName
+
+    $fileUpload = Add-AzVhd -ResourceGroupName $resourceGroup -Destination $destinationFile -LocalFilePath $sourceFile
+}
+
 # Create Azure Security Group for the Virtual Network
 Function Create_Network_Security_Group {
 
@@ -70,24 +89,32 @@ Function Create_Network_Security_Group {
     $settings = ConvertFrom-Json -InputObject $settingsContent
     $securityGroupName = $settings.securityGroupName
  
-    $httpsRule = New-AzNetworkSecurityRuleConfig -Name https-rule -Description "Allow HTTPS" -Access Allow -Protocol Tcp -Direction Inbound `
-                  -Priority 100 -SourceAddressPrefix Internet -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 443
+    $securityGroupExists = Get-AzNetworkSecurityGroup -Name $securityGroupName -ErrorVariable $noSecurityGroup -ErrorAction Continue
+    If ($securityGroupExists -eq $null) {
+        $httpsRule = New-AzNetworkSecurityRuleConfig -Name https-rule -Description "Allow HTTPS" -Access Allow -Protocol Tcp -Direction Inbound `
+                      -Priority 100 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 443
 
-    $udpRule = New-AzNetworkSecurityRuleConfig -Name udp-rule -Description "Allow UDP 443" -Access Allow -Protocol Udp -Direction Inbound `
-                  -Priority 101 -SourceAddressPrefix Internet -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 443
+        $udpRule = New-AzNetworkSecurityRuleConfig -Name udp-rule -Description "Allow UDP 443" -Access Allow -Protocol Udp -Direction Inbound `
+                      -Priority 101 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 443
  
 
-    $httpRule = New-AzNetworkSecurityRuleConfig -Name http-rule -Description "Allow HTTP" -Access Allow -Protocol Tcp -Direction Inbound `
-                  -Priority 102 -SourceAddressPrefix Internet -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 80
+        $httpRule = New-AzNetworkSecurityRuleConfig -Name http-rule -Description "Allow HTTP" -Access Allow -Protocol Tcp -Direction Inbound `
+                      -Priority 102 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 80
 
-    $blastHttpRule = New-AzNetworkSecurityRuleConfig -Name http-blast-rule -Description "Allow Blast" -Access Allow -Protocol Tcp -Direction Inbound `
-                  -Priority 103 -SourceAddressPrefix Internet -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
+        $blastHttpRule = New-AzNetworkSecurityRuleConfig -Name http-blast-rule -Description "Allow Blast" -Access Allow -Protocol Tcp -Direction Inbound `
+                      -Priority 103 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
 
-    $blastUDPRule = New-AzNetworkSecurityRuleConfig -Name udp-blast-rule -Description "Allow Blast" -Access Allow -Protocol Udp -Direction Inbound `
-                  -Priority 104 -SourceAddressPrefix Internet -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
+        $blastUDPRule = New-AzNetworkSecurityRuleConfig -Name udp-blast-rule -Description "Allow Blast" -Access Allow -Protocol Udp -Direction Inbound `
+                      -Priority 104 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
 
-    $nsg = New-AzNetworkSecurityGroup -ResourceGroupName $settings.resourceGroupName -Location $settings.location -Name $securityGroupName `
-                -SecurityRules $httpsRule, $httpRule, $udpRule, $blastHttpRule, $blastUDPRule
+        $uagAdminRule = New-AzNetworkSecurityRuleConfig -Name uag-admin-rule -Description "UAG Admin" -Access Allow -Protocol Tcp -Direction Inbound `
+                      -Priority 105 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 9443
+
+        $nsg = New-AzNetworkSecurityGroup -ResourceGroupName $settings.resourceGroupName -Location $settings.location -Name $securityGroupName `
+                    -SecurityRules $httpsRule, $httpRule, $udpRule, $blastHttpRule, $blastUDPRule, $uagAdminRule
+    } Else {
+        Write-Info-Message "Security Group {$securityGroupName} Exists"
+    }
 }
 
 # Create the Virtual Network.  Need to better understand the implications of the AddressPrefix setting.
@@ -105,13 +132,18 @@ Function Create_Virtual_Network {
     $subnetName = $settings.subnetName
     $dnsPrefix = $settings.publicDNSPrefix
 
-    $networkSubnet = New-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix 10.0.2.0/24
-    $virtualNetwork = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName -Location $location -Name $virtualNetworkName `
-                        -AddressPrefix 10.0.2.0/24 -Subnet $networkSubnet
+    $virtualNetworkExists = Get-AzVirtualNetwork -Name $virtualNetworkName -ErrorVariable $noVirtualNetwork -ErrorAction Continue
+    If ($virtualNetworkExists -eq $null) {
+        $networkSubnet = New-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix 10.0.2.0/24
+        $virtualNetwork = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName -Location $location -Name $virtualNetworkName `
+                            -AddressPrefix 10.0.2.0/24 -Subnet $networkSubnet
 
 
-    $publicIPAddress = New-AzPublicIpAddress -Name $publicIPName -ResourceGroupName $resourceGroupName -Location $location `
-                        -AllocationMethod Static -DomainNameLabel $dnsPrefix
+        $publicIPAddress = New-AzPublicIpAddress -Name $publicIPName -ResourceGroupName $resourceGroupName -Location $location `
+                            -AllocationMethod Static -DomainNameLabel $dnsPrefix
+    } Else {
+        Write-Info-Message "Virtual Network $virtualNetworkName Exists!"
+    }
 }
 
 # Create the NIC for the VM
@@ -126,16 +158,25 @@ Function Create-NIC {
     $virtualNetworkName = $settings.virtualNetworkName
     $subnetName = $settings.subnetName
     $securityGroupName = $settings.securityGroupName
+    $publicIPName = $settings.publicIPName
 
-    $virtualNetwork = Get-AzVirtualNetwork -Name $virtualNetworkName
-    $securityGroup = Get-AzNetworkSecurityGroup -Name $securityGroupName
-    $uagSubnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $virtualNetwork
+    $nicExists = Get-AzNetworkInterface -Name "eth0" -ErrorVariable $noVirtualNetwork -ErrorAction Continue
+    If ($nicExists -eq $null) {
+        $virtualNetwork = Get-AzVirtualNetwork -Name $virtualNetworkName
+        $securityGroup = Get-AzNetworkSecurityGroup -Name $securityGroupName
+        $uagSubnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $virtualNetwork
+        $publicIPAddress = Get-AzPublicIpAddress -Name $publicIPName
 
-    $nicCard = New-AzNetworkInterface -Name "eth0" -ResourceGroupName $resourceGroupName -Location $location -SubnetId $uagSubnet.Id `
-                -NetworkSecurityGroupId $securityGroup.Id
+        $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "InterfaceConfig" -PublicIpAddress $publicIPAddress -Subnet $uagSubnet
+        $nicCard = New-AzNetworkInterface -Name "eth0" -ResourceGroupName $resourceGroupName -Location $location -IpConfiguration $interfaceConfig `
+                    -NetworkSecurityGroupId $securityGroup.Id
+    } Else {
+        Write-Info-Message "NIC Card eth0 Exists"
+    }
 }
+    
 
-Function Get-Disk-Uri {
+Function Get-VHD-Uri {
 
     $jsonPath = Get_Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
@@ -151,6 +192,21 @@ Function Get-Disk-Uri {
     $blobUri = $storageBlob.BlobClient.Uri
 
     return $blobUri
+}
+
+
+# This is information that needs to be passed to the OS build process.  Need better documentation on exactly what this is.
+Function Get-Custom-Data {
+
+    $jsonPath = Get_Settings
+    $settingsContent = Get-Content -Path $jsonPath | Out-String 
+    $settings = ConvertFrom-Json -InputObject $settingsContent
+
+    $customDataFilePath = $settings.customDataFile
+    $customDataContent = Get-Content -Path $customDataFilePath
+    $64bitCustomData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($customDataContent))
+    
+    return $64bitCustomData.toString()
 }
 
 Function Create-Virtual-Machine {
@@ -177,42 +233,54 @@ Function Create-Virtual-Machine {
     $nicCard = Get-AzNetworkInterface -Name "eth0"
 
     $diskGUID = New-Guid
-    $sourceDiskURI = Get-Disk-Uri
+    $sourceDisk = Get-VHD-Uri
+    $sourceDiskUri = $sourceDisk.AbsoluteUri
+    Write-Output $sourceDiskURI
+    $customData = Get-Custom-Data
+    Write-Output $customData.GetType().FullName
     $diskName = "OSDisk-" + $diskGUID
-    $distinationURI = $pathString.Substring(0, $pathString.LastIndexOf("/")) + "/osDisk.vhd"
+    $destinationURI = $sourceDiskURI.Substring(0, $sourceDiskURI.LastIndexOf("/")) + "/osDisk.vhd"
+    Write-Output $destinationURI
     $virtualMachineConfig = New-AzVMConfig -VMName $vmName -VMSize $vmSize
-    $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -Name $diskName -VhdUri $distinationURI -SourceImageUri $sourceDiskURI `
-                                -Linux -CreateOption FromImage
-    $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Linux -ComputerName $vmName -Credential $credentials
+    $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -VhdUri $destinationURI -SourceImageUri $sourceDiskURI `
+                                -Linux -CreateOption FromImage -Name $diskName
+    $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Linux -ComputerName $vmName -Credential $credentials `
+                            -CustomData $customData
     $virtualMachineConfig = Add-AzVMNetworkInterface -VM $virtualMachineConfig -Id $nicCard.Id
 
-    $virualMachine = New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroupName -Location $location
+    $virualMachine = New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroupName -Location $location -Verbose
                         
 }
 
 # Main() - This is where the code actually starts.  It calls all of the functions above, with the exception of
 # Write_Error_Message which gets called from the individual functions.
-Write-Info-Message "Validating Installed Modules"
+Write-Warning-Message "Validating Installed Modules"
 Validate_AzureModules
 
 # All settings are in a JSON file.  This call retrieves them.
-Write-Info-Message "Getting Settings"
+Write-Warning-Message "Getting Settings"
 Get_Settings
 
-Write-Info-Message "Connecting to Azure"
+Write-Warning-Message "Connecting to Azure"
 Connect_To_Azure
 
-Write-Info-Message "Creating Security Group"
+Write-Warning-Message "Uploading VHD"
+# Upload-VHD
+
+Write-Warning-Message "Creating Security Group"
 Create_Network_Security_Group
 
-Write-Info-Message "Creating Virtual Network"
+Write-Warning-Message "Creating Virtual Network"
 Create_Virtual_Network
 
-Write-Info-Message "Creating NIC(s)"
+Write-Warning-Message "Creating NIC(s)"
 Create-NIC
 
-Write-Info-Message "Getting VHD URI"
-Get-Disk-Uri
+Write-Warning-Message "Getting VHD URI"
+Get-VHD-Uri
 
-Write-Info-Message "Create Virtual Machine"
+Write-Warning-Message "Getting Custom Data"
+Get-Custom-Data
+
+Write-Warning-Message "Create Virtual Machine"
 Create-Virtual-Machine
