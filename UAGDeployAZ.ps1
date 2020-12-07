@@ -1,4 +1,4 @@
-﻿<#
+<#
     This is a set of functions -- Search for Main() to see where the code actually starts.
 #>
 
@@ -136,7 +136,7 @@ Function Create_Virtual_Network {
     If ($virtualNetworkExists -eq $null) {
         $networkSubnet = New-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix 10.0.2.0/24
         $virtualNetwork = New-AzVirtualNetwork -ResourceGroupName $resourceGroupName -Location $location -Name $virtualNetworkName `
-                            -AddressPrefix 10.0.2.0/24 -Subnet $networkSubnet
+                            -AddressPrefix 10.0.0.0/16 -Subnet $networkSubnet
 
 
         $publicIPAddress = New-AzPublicIpAddress -Name $publicIPName -ResourceGroupName $resourceGroupName -Location $location `
@@ -202,11 +202,66 @@ Function Get-Custom-Data {
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
-    $customDataFilePath = $settings.customDataFile
-    $customDataContent = Get-Content -Path $customDataFilePath
-    $64bitCustomData = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($customDataContent))
-    
-    return $64bitCustomData.toString()
+    $vmSettings = "deploymentOption=" + $settings.deploymentOption + "`n"
+    $vmSettings = $vmSettings + "rootPassword=" + $settings.rootPassword + "`n"
+    $vmSettings = $vmSettings + "adminPassword=" + $settings.adminPassword + "`n"
+    $vmSettings = $vmSettings + "ipMode0=DHCPV4+DHCPV6`n"
+
+    $emptyArray = @()
+    $emptyHash = @{}
+    $kerbKeyTabSettings = [PSCustomObject]@{
+        kerberosKeyTabSettings = $emptyArray
+    }
+
+    $kerberosRealmSettingsListArray = [PSCustomObject]@{
+        kerberosRealmSettingsList = $emptyArray 
+    }
+
+    $idPExternalMetadataSettingsListArray = [PSCustomObject]@{
+        idPExternalMetadataSettingsList = $emptyArray
+    }
+
+    $edgeServiceSettingsListArray = [PSCustomObject]@{
+        edgeServiceSettingsList = $emptyArray
+    }
+
+    $settingsObject = [PSCustomObject]@{
+        locale = "en_US"
+        ssl30Enabled = "false"
+        tls10Enabled = "false"
+        tls11Enabled = "false"
+        tls12Enabled = "true"
+        tls13Enabled = "true"
+        sysLogType = "UDP"
+    }
+
+    $authMethodSettingsListArray = [PSCustomObject]@{
+        authMethodSettingsList = $emptyArray
+    }
+
+    $serviceProviderMetadataListArray = [PSCustomObject]@{
+        items = $emptyArray
+    }
+
+    $allSettingsJSON = [PSCustomObject]@{
+        kerberosKeyTabSettingsList = $kerbKeyTabSettings
+        kerberosRealmSettingsList = $kerberosRealmSettingsListArray
+        idPExternalMetadataSettingsList = $idPExternalMetadataSettingsListArray
+        edgeServiceSettingsList = $edgeServiceSettingsListArray
+        systemSettings = $settingsObject
+        authMethodSettingsList = $authMethodSettingsListArray
+        serviceProviderMetadataList = $serviceProviderMetadataListArray
+        identityProviderMetaData = @{}
+    }
+
+    $settingsJSONString = ConvertTo-Json -InputObject $allSettingsJSON -Compress
+    $jsonForSettings = $settingsJSONString.Replace("`"", "\`"")
+
+    $vmSettings = $vmSettings + "settingsJSON=" + $jsonForSettings
+    Write-Output $vmSettings
+    $base64Settings = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($vmSettings))
+    Write-Output $base64Settings
+    return $vmSettings
 }
 
 Function Create-Virtual-Machine {
@@ -237,8 +292,9 @@ Function Create-Virtual-Machine {
     $sourceDiskUri = $sourceDisk.AbsoluteUri
     Write-Output $sourceDiskURI
     $customData = Get-Custom-Data
-    Write-Output $customData.GetType().FullName
-    $diskName = "OSDisk-" + $diskGUID
+
+    $customData = "ZGVwbG95bWVudE9wdGlvbj1vbmVuaWMNCnJvb3RQYXNzd29yZD1BaXJXYXRjaDENCmFkbWluUGFzc3dvcmQ9QWlyV2F0Y2gxDQppcE1vZGUwPURIQ1BWNCtESENQVjYNCnNldHRpbmdzSlNPTj17XCJrZXJiZXJvc0tleVRhYlNldHRpbmdzTGlzdFwiOnsgXCJrZXJiZXJvc0tleVRhYlNldHRpbmdzXCI6IFtdfSwgXCJrZXJiZXJvc1JlYWxtU2V0dGluZ3NMaXN0XCI6eyBcImtlcmJlcm9zUmVhbG1TZXR0aW5nc0xpc3RcIjogW119LCBcImlkUEV4dGVybmFsTWV0YWRhdGFTZXR0aW5nc0xpc3RcIjp7IFwiaWRQRXh0ZXJuYWxNZXRhZGF0YVNldHRpbmdzTGlzdFwiOiBbXX0sIFwiZWRnZVNlcnZpY2VTZXR0aW5nc0xpc3RcIjp7IFwiZWRnZVNlcnZpY2VTZXR0aW5nc0xpc3RcIjogW10gfSwgXCJzeXN0ZW1TZXR0aW5nc1wiOntcImxvY2FsZVwiOiBcImVuX1VTXCIsXCJzc2wzMEVuYWJsZWRcIjogXCJmYWxzZVwiLFwidGxzMTBFbmFibGVkXCI6IFwiZmFsc2VcIixcInRsczExRW5hYmxlZFwiOiBcImZhbHNlXCIsXCJ0bHMxMkVuYWJsZWRcIjogXCJ0cnVlXCIsXCJ0bHMxM0VuYWJsZWRcIjogXCJ0cnVlXCIsXCJzeXNMb2dUeXBlXCI6IFwiVURQXCJ9LCBcImF1dGhNZXRob2RTZXR0aW5nc0xpc3RcIjp7IFwiYXV0aE1ldGhvZFNldHRpbmdzTGlzdFwiOiBbXSB9LCBcInNlcnZpY2VQcm92aWRlck1ldGFkYXRhTGlzdFwiOiB7IFwiaXRlbXNcIjogWyBdIH0sIFwiaWRlbnRpdHlQcm92aWRlck1ldGFEYXRhXCI6IHsgIH19DQo="
+    $diskName = "UAGOSDisk"
     $destinationURI = $sourceDiskURI.Substring(0, $sourceDiskURI.LastIndexOf("/")) + "/osDisk.vhd"
     Write-Output $destinationURI
     $virtualMachineConfig = New-AzVMConfig -VMName $vmName -VMSize $vmSize
