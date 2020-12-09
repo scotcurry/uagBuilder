@@ -10,7 +10,7 @@
 #>
 
 # If there is an error, this is the function that formats the string with the appropriate coloring.
-Function Write_Error_Message {
+Function Write-Error-Message {
     
     Param ($message)
 	Write-Host $message -foregroundcolor Red -backgroundcolor Black
@@ -30,7 +30,7 @@ Function Write-Info-Message {
 }
 
 # This code just checks to make sure that all of the Azure Powershell Modules are on the system.
-Function Validate_AzureModules {
+Function Validate-AzureModules {
 
     If (-not (Get-InstalledModule -Name "Az")) {
         Write_Error_Message "Module Az Not Installed!"
@@ -40,7 +40,7 @@ Function Validate_AzureModules {
 }
 
 # Get the settings to run this script from a file called UAGSettings.json
-Function Get_Settings {
+Function Get-Settings {
 
     #Check if the UAGSettings.json exists
     $scriptFolder = $PSScriptRoot
@@ -54,23 +54,40 @@ Function Get_Settings {
 }
 
 # This function makes a connection to your Azure instance using the subscription ID.
-Function Connect_To_Azure {
+Function Connect-To-Azure {
 
-    $jsonPath = Get_Settings
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
     $connected = Get-AzSubscription -SubscriptionId $settings.subscriptionID -WarningVariable $errorConnecting -WarningAction Continue
-    If ($errorConnecting) {
+    If ($null -eq $connected) {
         Connect-AzAccount -Subscription $settings.subscriptionID
     }
     $tenantID = (Get-AzContext).Tenant.Id
     Write-Info-Message "Connected to Azure Tenant $tenantID"
 }
 
+Function Create-Resource-Group {
+    
+    $jsonPath = Get-Settings
+    $settingsContent = Get-Content -Path $jsonPath | Out-String 
+    $settings = ConvertFrom-Json -InputObject $settingsContent
+
+    $resourceGroupName = $settings.resourceGroupName
+    $location = $settings.location
+    $resourceGroup = Get-AzResourceGroup -Name $resourceGroupName -Location $location
+    If ($null -eq $resourceGroup) {
+        $resourceGroup = New-AzResourceGroup -Location $location -Name $resourceGroupName
+    } else {
+        Write-Info-Message "Resource Group $resourceGroupName Exists!"
+    }
+
+}
+
 Function Upload-VHD {
 
-    $jsonPath = Get_Settings
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
@@ -82,15 +99,15 @@ Function Upload-VHD {
 }
 
 # Create Azure Security Group for the Virtual Network
-Function Create_Network_Security_Group {
+Function Create-Network-Security-Group {
 
-    $jsonPath = Get_Settings
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
     $securityGroupName = $settings.securityGroupName
  
     $securityGroupExists = Get-AzNetworkSecurityGroup -Name $securityGroupName -ErrorVariable $noSecurityGroup -ErrorAction Continue
-    If ($securityGroupExists -eq $null) {
+    If ($null -eq $securityGroupExists) {
         $httpsRule = New-AzNetworkSecurityRuleConfig -Name https-rule -Description "Allow HTTPS" -Access Allow -Protocol Tcp -Direction Inbound `
                       -Priority 100 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 443
 
@@ -118,9 +135,9 @@ Function Create_Network_Security_Group {
 }
 
 # Create the Virtual Network.  Need to better understand the implications of the AddressPrefix setting.
-Function Create_Virtual_Network {
+Function Create-Virtual-Network {
     
-    $jsonPath = Get_Settings
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
@@ -140,7 +157,7 @@ Function Create_Virtual_Network {
 
 
         $publicIPAddress = New-AzPublicIpAddress -Name $publicIPName -ResourceGroupName $resourceGroupName -Location $location `
-                            -AllocationMethod Static -DomainNameLabel $dnsPrefix
+                            -AllocationMethod Dynamic -DomainNameLabel $dnsPrefix
     } Else {
         Write-Info-Message "Virtual Network $virtualNetworkName Exists!"
     }
@@ -149,7 +166,7 @@ Function Create_Virtual_Network {
 # Create the NIC for the VM
 Function Create-NIC {
 
-    $jsonPath = Get_Settings
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
@@ -161,7 +178,7 @@ Function Create-NIC {
     $publicIPName = $settings.publicIPName
 
     $nicExists = Get-AzNetworkInterface -Name "eth0" -ErrorVariable $noVirtualNetwork -ErrorAction Continue
-    If ($nicExists -eq $null) {
+    If ($null -eq $nicExists) {
         $virtualNetwork = Get-AzVirtualNetwork -Name $virtualNetworkName
         $securityGroup = Get-AzNetworkSecurityGroup -Name $securityGroupName
         $uagSubnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $virtualNetwork
@@ -178,14 +195,13 @@ Function Create-NIC {
 
 Function Get-VHD-Uri {
 
-    $jsonPath = Get_Settings
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
     $vhdFileName = $settings.uagVHDFileName
     $resourceGroupName = $settings.resourceGroupName
     $storageAccount = Get-AzStorageAccount -ResourceGroupName $resourceGroupName
-    $storageBlobEndpoint = $storageAccount.PrimaryEndpoints.Blob.ToString()
 
     $storageContainer = Get-AzStorageContainer -Name "uagcontainer" -Context $storageAccount.Context
     $storageBlob = Get-AzStorageBlob -Container $storageContainer.Name -Context $storageAccount.Context -Blob $vhdFileName
@@ -198,17 +214,17 @@ Function Get-VHD-Uri {
 # This is information that needs to be passed to the OS build process.  Need better documentation on exactly what this is.
 Function Get-Custom-Data {
 
-    $jsonPath = Get_Settings
+    [OutputType("System.String")]
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
-    $vmSettings = "deploymentOption=" + $settings.deploymentOption + "`n"
-    $vmSettings = $vmSettings + "rootPassword=" + $settings.rootPassword + "`n"
-    $vmSettings = $vmSettings + "adminPassword=" + $settings.adminPassword + "`n"
-    $vmSettings = $vmSettings + "ipMode0=DHCPV4+DHCPV6`n"
+    $vmSettings = "deploymentOption=" + $settings.deploymentOption + "`r`n"
+    $vmSettings = $vmSettings + "rootPassword=" + $settings.rootPassword + "`r`n"
+    $vmSettings = $vmSettings + "adminPassword=" + $settings.adminPassword + "`r`n"
+    $vmSettings = $vmSettings + "ipMode0=DHCPV4+DHCPV6`r`n"
 
     $emptyArray = @()
-    $emptyHash = @{}
     $kerbKeyTabSettings = [PSCustomObject]@{
         kerberosKeyTabSettings = $emptyArray
     }
@@ -257,16 +273,14 @@ Function Get-Custom-Data {
     $settingsJSONString = ConvertTo-Json -InputObject $allSettingsJSON -Compress
     $jsonForSettings = $settingsJSONString.Replace("`"", "\`"")
 
-    $vmSettings = $vmSettings + "settingsJSON=" + $jsonForSettings
-    Write-Output $vmSettings
+    $vmSettings = $vmSettings + "settingsJSON=" + $jsonForSettings + "`r`n"
     $base64Settings = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($vmSettings))
-    Write-Output $base64Settings
-    return $vmSettings
+    return $base64Settings
 }
 
 Function Create-Virtual-Machine {
 
-    $jsonPath = Get_Settings
+    $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
@@ -282,21 +296,17 @@ Function Create-Virtual-Machine {
 
     $securePassword = ConvertTo-SecureString -String $adminPassword -AsPlainText -Force
     $credentials = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList $adminUserName, $securePassword
-    $virtualNetwork = Get-AzVirtualNetwork -Name $virtualNetworkName
-    $securityGroup = Get-AzNetworkSecurityGroup -Name $securityGroupName
-    $publicIPAddress = Get-AzPublicIpAddress -Name $publicIPName
     $nicCard = Get-AzNetworkInterface -Name "eth0"
-
-    $diskGUID = New-Guid
+    
     $sourceDisk = Get-VHD-Uri
     $sourceDiskUri = $sourceDisk.AbsoluteUri
-    Write-Output $sourceDiskURI
     $customData = Get-Custom-Data
+    $customData = $customData.ToString()
 
-    $customData = "ZGVwbG95bWVudE9wdGlvbj1vbmVuaWMNCnJvb3RQYXNzd29yZD1BaXJXYXRjaDENCmFkbWluUGFzc3dvcmQ9QWlyV2F0Y2gxDQppcE1vZGUwPURIQ1BWNCtESENQVjYNCnNldHRpbmdzSlNPTj17XCJrZXJiZXJvc0tleVRhYlNldHRpbmdzTGlzdFwiOnsgXCJrZXJiZXJvc0tleVRhYlNldHRpbmdzXCI6IFtdfSwgXCJrZXJiZXJvc1JlYWxtU2V0dGluZ3NMaXN0XCI6eyBcImtlcmJlcm9zUmVhbG1TZXR0aW5nc0xpc3RcIjogW119LCBcImlkUEV4dGVybmFsTWV0YWRhdGFTZXR0aW5nc0xpc3RcIjp7IFwiaWRQRXh0ZXJuYWxNZXRhZGF0YVNldHRpbmdzTGlzdFwiOiBbXX0sIFwiZWRnZVNlcnZpY2VTZXR0aW5nc0xpc3RcIjp7IFwiZWRnZVNlcnZpY2VTZXR0aW5nc0xpc3RcIjogW10gfSwgXCJzeXN0ZW1TZXR0aW5nc1wiOntcImxvY2FsZVwiOiBcImVuX1VTXCIsXCJzc2wzMEVuYWJsZWRcIjogXCJmYWxzZVwiLFwidGxzMTBFbmFibGVkXCI6IFwiZmFsc2VcIixcInRsczExRW5hYmxlZFwiOiBcImZhbHNlXCIsXCJ0bHMxMkVuYWJsZWRcIjogXCJ0cnVlXCIsXCJ0bHMxM0VuYWJsZWRcIjogXCJ0cnVlXCIsXCJzeXNMb2dUeXBlXCI6IFwiVURQXCJ9LCBcImF1dGhNZXRob2RTZXR0aW5nc0xpc3RcIjp7IFwiYXV0aE1ldGhvZFNldHRpbmdzTGlzdFwiOiBbXSB9LCBcInNlcnZpY2VQcm92aWRlck1ldGFkYXRhTGlzdFwiOiB7IFwiaXRlbXNcIjogWyBdIH0sIFwiaWRlbnRpdHlQcm92aWRlck1ldGFEYXRhXCI6IHsgIH19DQo="
+    # $customData = "ZGVwbG95bWVudE9wdGlvbj1vbmVuaWMNCnJvb3RQYXNzd29yZD1BaXJXYXRjaDENCmFkbWluUGFzc3dvcmQ9QWlyV2F0Y2gxDQppcE1vZGUwPURIQ1BWNCtESENQVjYNCnNldHRpbmdzSlNPTj17XCJrZXJiZXJvc0tleVRhYlNldHRpbmdzTGlzdFwiOnsgXCJrZXJiZXJvc0tleVRhYlNldHRpbmdzXCI6IFtdfSwgXCJrZXJiZXJvc1JlYWxtU2V0dGluZ3NMaXN0XCI6eyBcImtlcmJlcm9zUmVhbG1TZXR0aW5nc0xpc3RcIjogW119LCBcImlkUEV4dGVybmFsTWV0YWRhdGFTZXR0aW5nc0xpc3RcIjp7IFwiaWRQRXh0ZXJuYWxNZXRhZGF0YVNldHRpbmdzTGlzdFwiOiBbXX0sIFwiZWRnZVNlcnZpY2VTZXR0aW5nc0xpc3RcIjp7IFwiZWRnZVNlcnZpY2VTZXR0aW5nc0xpc3RcIjogW10gfSwgXCJzeXN0ZW1TZXR0aW5nc1wiOntcImxvY2FsZVwiOiBcImVuX1VTXCIsXCJzc2wzMEVuYWJsZWRcIjogXCJmYWxzZVwiLFwidGxzMTBFbmFibGVkXCI6IFwiZmFsc2VcIixcInRsczExRW5hYmxlZFwiOiBcImZhbHNlXCIsXCJ0bHMxMkVuYWJsZWRcIjogXCJ0cnVlXCIsXCJ0bHMxM0VuYWJsZWRcIjogXCJ0cnVlXCIsXCJzeXNMb2dUeXBlXCI6IFwiVURQXCJ9LCBcImF1dGhNZXRob2RTZXR0aW5nc0xpc3RcIjp7IFwiYXV0aE1ldGhvZFNldHRpbmdzTGlzdFwiOiBbXSB9LCBcInNlcnZpY2VQcm92aWRlck1ldGFkYXRhTGlzdFwiOiB7IFwiaXRlbXNcIjogWyBdIH0sIFwiaWRlbnRpdHlQcm92aWRlck1ldGFEYXRhXCI6IHsgIH19DQo="
     $diskName = "UAGOSDisk"
     $destinationURI = $sourceDiskURI.Substring(0, $sourceDiskURI.LastIndexOf("/")) + "/osDisk.vhd"
-    Write-Output $destinationURI
+
     $virtualMachineConfig = New-AzVMConfig -VMName $vmName -VMSize $vmSize
     $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -VhdUri $destinationURI -SourceImageUri $sourceDiskURI `
                                 -Linux -CreateOption FromImage -Name $diskName
@@ -309,25 +319,27 @@ Function Create-Virtual-Machine {
 }
 
 # Main() - This is where the code actually starts.  It calls all of the functions above, with the exception of
-# Write_Error_Message which gets called from the individual functions.
 Write-Warning-Message "Validating Installed Modules"
-Validate_AzureModules
+Validate-AzureModules
 
 # All settings are in a JSON file.  This call retrieves them.
 Write-Warning-Message "Getting Settings"
-Get_Settings
+Get-Settings
 
 Write-Warning-Message "Connecting to Azure"
-Connect_To_Azure
+Connect-To-Azure
+
+Write-Warning-Message "Creating Resource Group"
+Create-Resource-Group
 
 Write-Warning-Message "Uploading VHD"
 # Upload-VHD
 
 Write-Warning-Message "Creating Security Group"
-Create_Network_Security_Group
+Create-Network-Security-Group
 
 Write-Warning-Message "Creating Virtual Network"
-Create_Virtual_Network
+Create-Virtual-Network
 
 Write-Warning-Message "Creating NIC(s)"
 Create-NIC
