@@ -2,7 +2,7 @@
     "vhdFileName": "euc-unified-access-gateway-21.03.1.0-17827713_OVF10.vhd",
     "uagName": "CurrywareUAG",
     "deploymentOption": "onenic",
-    "subscriptionID": "d8a86ded-b25e-48ff-873a-bf101b435edd",
+    "subscriptionID": "12345678-abcd-ef01-2345-1234567890ab",
     "resourceGroupName": "TunnelGroup",
     "location": "northcentralus",
     "storageAccountName": "uagcontainer",
