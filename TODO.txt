@@ -1,0 +1,3 @@
+Update UAGSettings.json - StorageAccountName to uagStorage
+Add UAGSettings.json - Add uagcontainer
+Get rid of DiskStorageContainer

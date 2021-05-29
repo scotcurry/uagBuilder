@@ -30,7 +30,7 @@ Function Write-Info-Message {
 }
 
 # This code just checks to make sure that all of the Azure Powershell Modules are on the system.
-Function Validate-AzureModules {
+Function Find-AzureModules {
 
     If (-not (Get-InstalledModule -Name "Az")) {
         Write_Error_Message "Module Az Not Installed!"
@@ -56,9 +56,7 @@ Function Get-Settings {
 # This function makes a connection to your Azure instance using the subscription ID.
 Function Connect-To-Azure {
 
-    $jsonPath = Get-Settings
-    $settingsContent = Get-Content -Path $jsonPath | Out-String 
-    $settings = ConvertFrom-Json -InputObject $settingsContent
+    $settings = Get-Settings
 
     $connected = Get-AzSubscription -SubscriptionId $settings.subscriptionID -WarningVariable $errorConnecting -WarningAction Continue
     If ($null -eq $connected) {
@@ -68,7 +66,8 @@ Function Connect-To-Azure {
     Write-Info-Message "Connected to Azure Tenant $tenantID"
 }
 
-Function Create-Resource-Group {
+# Creates the Resource Group with the name specified in the .json file.
+Function New-Resource-Group {
     
     $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
@@ -82,7 +81,32 @@ Function Create-Resource-Group {
     } else {
         Write-Info-Message "Resource Group $resourceGroupName Exists!"
     }
+}
 
+Function Find-StorageSettings {
+
+    $jsonPath = Get-Settings
+    $settingsContent = Get-Content -Path $jsonPath | Out-String 
+    $settings = ConvertFrom-Json -InputObject $settingsContent
+    $storageAccountExists = Get-AzStorageAccount -Name $settings.storageAccountName -ResourceGroupName $settings.resourceGroupName
+
+    if ($null -ne $storageAccountExists) {
+        $storageContext = $storageAccountExists.Context
+        $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
+        if ($null -ne $storageContainer) {
+            $vhdBlob = Get-AzStorageBlob -Context $storageContext -Container $storageContainer.Name -Blob $settings.vhdFileName
+            if ($null -ne $vhdBlob) {
+                Write-Info-Message "Blob Exists"
+            } else {
+                Write-Info-Message "Blob Doesn't Exist"
+            }
+        } else {
+            Write-Info-Message "Need to create the storage container"
+        }
+        Write-Info-Message ("Storage Account " + $settings.storageAccountName + " Exists")
+    } else {
+        Write-Warning "Need to create the storage account here!"
+    }
 }
 
 Function Upload-VHD {
@@ -95,7 +119,9 @@ Function Upload-VHD {
     $destinationFile = $settings.imageURI
     $resourceGroup = $settings.resourceGroupName
 
-    $fileUpload = Add-AzVhd -ResourceGroupName $resourceGroup -Destination $destinationFile -LocalFilePath $sourceFile
+    Write-Output $destinationFile
+    Write-Output $sourceFile
+    $fileUpload = Add-AzVhd -ResourceGroupName $resourceGroup -Destination $destinationFile -LocalFilePath $sourceFile -OverWrite
 }
 
 # Create Azure Security Group for the Virtual Network
@@ -199,7 +225,7 @@ Function Get-VHD-Uri {
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
-    $vhdFileName = $settings.uagVHDFileName
+    $vhdFileName = $settings.vhdFileName
     $resourceGroupName = $settings.resourceGroupName
     $storageAccount = Get-AzStorageAccount -ResourceGroupName $resourceGroupName
 
@@ -309,7 +335,7 @@ Function Create-Virtual-Machine {
 
     $virtualMachineConfig = New-AzVMConfig -VMName $vmName -VMSize $vmSize
     $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -VhdUri $destinationURI -SourceImageUri $sourceDiskURI `
-                                -Linux -CreateOption FromImage -Name $diskName
+                                -Linux -CreateOption FromImage -Name $diskName 
     $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Linux -ComputerName $vmName -Credential $credentials `
                             -CustomData $customData
     $virtualMachineConfig = Add-AzVMNetworkInterface -VM $virtualMachineConfig -Id $nicCard.Id
@@ -320,7 +346,7 @@ Function Create-Virtual-Machine {
 
 # Main() - This is where the code actually starts.  It calls all of the functions above, with the exception of
 Write-Warning-Message "Validating Installed Modules"
-Validate-AzureModules
+Find-AzureModules
 
 # All settings are in a JSON file.  This call retrieves them.
 Write-Warning-Message "Getting Settings"
@@ -329,26 +355,30 @@ Get-Settings
 Write-Warning-Message "Connecting to Azure"
 Connect-To-Azure
 
-Write-Warning-Message "Creating Resource Group"
-Create-Resource-Group
+Write-Warning-Message "Validating Storage"
+Find-StorageSettings
 
+Write-Warning-Message "Creating Resource Group"
+New-Resource-Group
+<#
 Write-Warning-Message "Uploading VHD"
 # Upload-VHD
 
 Write-Warning-Message "Creating Security Group"
-Create-Network-Security-Group
+# Create-Network-Security-Group
 
 Write-Warning-Message "Creating Virtual Network"
-Create-Virtual-Network
+# Create-Virtual-Network
 
 Write-Warning-Message "Creating NIC(s)"
-Create-NIC
+# Create-NIC
 
 Write-Warning-Message "Getting VHD URI"
-Get-VHD-Uri
+# Get-VHD-Uri
 
 Write-Warning-Message "Getting Custom Data"
-Get-Custom-Data
+# Get-Custom-Data
 
 Write-Warning-Message "Create Virtual Machine"
-Create-Virtual-Machine
+# Create-Virtual-Machine
+#>
