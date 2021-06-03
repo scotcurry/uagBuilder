@@ -1,3 +1,5 @@
 Update UAGSettings.json - StorageAccountName to uagStorage
 Add UAGSettings.json - Add uagcontainer
-Get rid of DiskStorageContainer
+Get rid of DiskStorageContainerhhhh
+
+URL to reach with Edge on tunnel http://currywaredemodc.curryware.org/

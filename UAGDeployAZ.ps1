@@ -88,13 +88,50 @@ Function Find-StorageSettings {
     $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
-    $storageAccountExists = Get-AzStorageAccount -Name $settings.storageAccountName -ResourceGroupName $settings.resourceGroupName
+    $storageAccount = Get-AzStorageAccount -Name $settings.storageAccountName -ResourceGroupName $settings.resourceGroupName
 
+    # Check to see if the storage account exists, if not create it and grab the context.
+    if ($null -eq $storageAccount) {
+        $storageAccount = New-AzStorageAccount -ResourceGroupName $settings.storageAccountName -Location $settings.location `
+            -SkuName Standard_LRS -Kind StorageV2
+        $storageContext = $storageAccount.Context
+    } else {
+        $storageContext = $storageAccount.Context
+    }
+
+    # Check to see if there is a container within the storage account and if not create it.
+    $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
+    if ($null -eq $storageContainer) {
+        $storageContainer = New-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
+    } else {
+        $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
+    }
+
+    # Check to see if the VHD blob exists and if not, upload it.
+    $vhdBlob = Get-AzStorageBlob -Context $storageContext -Container $storageContainer.Name -Blob $settings.vhdFileName
+    if ($null -eq $vhdBlob) {
+        $blobContainerBase = $storageContext.BlobEndPoint
+        $containerName = $settings.storageContainerName
+        $destinationFile = $blobContainerBase + $containerName + "/" + $settings.vhdFileName
+        # $fileUpload = Add-AzVhd -ResourceGroupName $settings.resourceGroupName -LocalFilePath $settings.uagLocalFile `
+        #     -Destination $destinationFile
+        Write-Output $destinationFile
+        Get-Member -InputObject $fileUpload
+    } else {
+        Write-Info-Message "VHD Exists"
+    }
+
+    <#
+    # Check to see if the storage account exists, if not create it.
     if ($null -ne $storageAccountExists) {
         $storageContext = $storageAccountExists.Context
         $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
         if ($null -ne $storageContainer) {
             $vhdBlob = Get-AzStorageBlob -Context $storageContext -Container $storageContainer.Name -Blob $settings.vhdFileName
+            $blobContext = $vhdBlob.Context
+            Get-Member -InputObject $blobContext
+            Write-Output $blobContext.BlobEndPoint
+            Write-Output $storageContainer.Name
             if ($null -ne $vhdBlob) {
                 Write-Info-Message "Blob Exists"
             } else {
@@ -107,6 +144,7 @@ Function Find-StorageSettings {
     } else {
         Write-Warning "Need to create the storage account here!"
     }
+    #>
 }
 
 Function Upload-VHD {
