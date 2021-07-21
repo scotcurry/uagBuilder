@@ -83,20 +83,25 @@ Function New-Resource-Group {
     }
 }
 
-Function Find-StorageSettings {
+Function Upload-VHD {
 
     $jsonPath = Get-Settings
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
+    Write-Info-Message ("Storage Account Name: " + $settings.storageAccountName)
+    Write-Info-Message ("Resource Grroup Name: " + $settings.resourceGroupName)
     $storageAccount = Get-AzStorageAccount -Name $settings.storageAccountName -ResourceGroupName $settings.resourceGroupName
 
     # Check to see if the storage account exists, if not create it and grab the context.
     if ($null -eq $storageAccount) {
-        $storageAccount = New-AzStorageAccount -ResourceGroupName $settings.storageAccountName -Location $settings.location `
-            -SkuName Standard_LRS -Kind StorageV2
+        $storageAccount = New-AzStorageAccount -ResourceGroupName $settings.resourceGroupName -Location $settings.location `
+            -SkuName Standard_LRS -Kind StorageV2 -Name $settings.storageAccountName
         $storageContext = $storageAccount.Context
     } else {
         $storageContext = $storageAccount.Context
+        if ($null -ne $storageContext) {
+            Write-Info-Message ("Storage Context Exists: " + $storageContext.Name)
+        }
     }
 
     # Check to see if there is a container within the storage account and if not create it.
@@ -105,61 +110,25 @@ Function Find-StorageSettings {
         $storageContainer = New-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
     } else {
         $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
+        Write-Info-Message ("Container Exists: " + $settings.storageContainerName)
     }
 
     # Check to see if the VHD blob exists and if not, upload it.
-    $vhdBlob = Get-AzStorageBlob -Context $storageContext -Container $storageContainer.Name -Blob $settings.vhdFileName
+    $vhdBlob = Get-AzStorageBlob -Context $storageContext -Container $storageContainer.Name -Blob $settings.vhdFileName `
+        -ErrorAction SilentlyContinue -WarningAction Continue
     if ($null -eq $vhdBlob) {
+        Write-Info-Message ("Upload VHD - Storage Container: " + $storageContainer.Name)
+        Write-Info-Message ("Upload VHD - Storage Context: " + $storageContext.Name)
+        Write-Info-Message ("Upload VHD - Blob Endpoint Base: " + $storageContext.BlobEndPoint)
         $blobContainerBase = $storageContext.BlobEndPoint
-        $containerName = $settings.storageContainerName
-        $destinationFile = $blobContainerBase + $containerName + "/" + $settings.vhdFileName
-        # $fileUpload = Add-AzVhd -ResourceGroupName $settings.resourceGroupName -LocalFilePath $settings.uagLocalFile `
-        #     -Destination $destinationFile
-        Write-Output $destinationFile
-        Get-Member -InputObject $fileUpload
+        $destinationFile = $blobContainerBase +  $settings.storageContainerName + "/" + $settings.vhdFileName
+        Write-Info-Message ("Destination File: " + $destinationFile)
+        Write-Info-Message ("Local File : " + $settings.uagLocalFile)
+        $fileUpload = Add-AzVhd -ResourceGroupName $settings.resourceGroupName -LocalFilePath $settings.uagLocalFile `
+            -Destination $destinationFile 
     } else {
         Write-Info-Message "VHD Exists"
     }
-
-    <#
-    # Check to see if the storage account exists, if not create it.
-    if ($null -ne $storageAccountExists) {
-        $storageContext = $storageAccountExists.Context
-        $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
-        if ($null -ne $storageContainer) {
-            $vhdBlob = Get-AzStorageBlob -Context $storageContext -Container $storageContainer.Name -Blob $settings.vhdFileName
-            $blobContext = $vhdBlob.Context
-            Get-Member -InputObject $blobContext
-            Write-Output $blobContext.BlobEndPoint
-            Write-Output $storageContainer.Name
-            if ($null -ne $vhdBlob) {
-                Write-Info-Message "Blob Exists"
-            } else {
-                Write-Info-Message "Blob Doesn't Exist"
-            }
-        } else {
-            Write-Info-Message "Need to create the storage container"
-        }
-        Write-Info-Message ("Storage Account " + $settings.storageAccountName + " Exists")
-    } else {
-        Write-Warning "Need to create the storage account here!"
-    }
-    #>
-}
-
-Function Upload-VHD {
-
-    $jsonPath = Get-Settings
-    $settingsContent = Get-Content -Path $jsonPath | Out-String 
-    $settings = ConvertFrom-Json -InputObject $settingsContent
-
-    $sourceFile = $settings.uagLocalFile
-    $destinationFile = $settings.imageURI
-    $resourceGroup = $settings.resourceGroupName
-
-    Write-Output $destinationFile
-    Write-Output $sourceFile
-    $fileUpload = Add-AzVhd -ResourceGroupName $resourceGroup -Destination $destinationFile -LocalFilePath $sourceFile -OverWrite
 }
 
 # Create Azure Security Group for the Virtual Network
@@ -265,11 +234,12 @@ Function Get-VHD-Uri {
 
     $vhdFileName = $settings.vhdFileName
     $resourceGroupName = $settings.resourceGroupName
-    $storageAccount = Get-AzStorageAccount -ResourceGroupName $resourceGroupName
+    $storageAccount = Get-AzStorageAccount -ResourceGroupName $resourceGroupName -Name $settings.storageAccountName
 
-    $storageContainer = Get-AzStorageContainer -Name "uagcontainer" -Context $storageAccount.Context
+    $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageAccount.Context
     $storageBlob = Get-AzStorageBlob -Container $storageContainer.Name -Context $storageAccount.Context -Blob $vhdFileName
     $blobUri = $storageBlob.BlobClient.Uri
+    Write-Info-Message ("Storage Blob URI: " + $blobUri)
 
     return $blobUri
 }
@@ -393,30 +363,26 @@ Get-Settings
 Write-Warning-Message "Connecting to Azure"
 Connect-To-Azure
 
-Write-Warning-Message "Validating Storage"
-Find-StorageSettings
-
 Write-Warning-Message "Creating Resource Group"
 New-Resource-Group
-<#
-Write-Warning-Message "Uploading VHD"
+
+Write-Warning-Message "Validating Storage"
 # Upload-VHD
 
 Write-Warning-Message "Creating Security Group"
-# Create-Network-Security-Group
+Create-Network-Security-Group
 
 Write-Warning-Message "Creating Virtual Network"
-# Create-Virtual-Network
+Create-Virtual-Network
 
 Write-Warning-Message "Creating NIC(s)"
-# Create-NIC
+Create-NIC
 
 Write-Warning-Message "Getting VHD URI"
-# Get-VHD-Uri
+Get-VHD-Uri
 
 Write-Warning-Message "Getting Custom Data"
-# Get-Custom-Data
+Get-Custom-Data
 
 Write-Warning-Message "Create Virtual Machine"
-# Create-Virtual-Machine
-#>
+Create-Virtual-Machine
