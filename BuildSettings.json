@@ -5,6 +5,7 @@
     "storageAccountName": "uagcontainer",
     "storageContainerName": "vhdstore",
     "vhdFileName": "euc-unified-access-gateway-21.06.0.0-18237595_OVF10.vhd",
+    "uagLocalFile": "/Users/scotc/Downloads/euc-unified-access-gateway-21.06.0.0-18237595_OVF10.vhd",
     "networkSecurityGroupName": "UAGSecurityGroup",
     "virtualNetworkName": "UAGNetwork",
     "subnetName": "UAGSubnet",
@@ -13,6 +14,7 @@
     "virtualMachineName": "CurrywareUAG",
     "publicDNSPrefix": "curryware-uag",
     "vmSize": "Standard_A2_v2",
-    "vmAdminUserName": "uagadmin",
-    "vmAdminPassword": "AzureAirWatch1!"
+    "rootPassword": "AzureAirWatch1!",
+    "rootUserName": "vmadmin",
+    "uagPassword": "AzureAirWatch1!"
 }

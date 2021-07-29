@@ -153,7 +153,10 @@ Function Get-Current-Environment-Info {
     }
 
     Write-Info-Message ("*** Checking Subnet ***")
-    if ($null -ne $virtualNetwork) {
+    if ($null -eq $virtualNetwork) {
+        $components.Add("virtualSubnetExists", $false)
+        Write-Warning-Message ("Virtual Subnet Doens't Exit")
+    } else {
         $virtualSubnet = Get-AzVirtualNetworkSubnetConfig -Name $settings.subnetName -VirtualNetwork $virtualNetwork
         if ($null -eq $virtualSubnet) {
             $components.Add("virtualSubnetExists", $false)
@@ -252,7 +255,8 @@ if ($false -eq $components.networkSecurityGroupExists) {
 }
 
 if ($false -eq $components.virtualSubnetExists) {
-    $networkSubnet = New-AzVirtualNetworkSubnetConfig -Name $subnetName -AddressPrefix 10.0.2.0/24
+    Write-Warning-Message ("Buildiing Subnet")
+    $networkSubnet = New-AzVirtualNetworkSubnetConfig -Name $settings.subnetName -AddressPrefix 10.0.2.0/24
 }
 
 if ($false -eq $components.virtualNetworkExists) {
@@ -262,7 +266,7 @@ if ($false -eq $components.virtualNetworkExists) {
 
 if ($false -eq $components.publicIPAddressExists) {
     $publicIPAddress = New-AzPublicIpAddress -Name $settings.publicIPAddressName -ResourceGroupName $settings.resourceGroupName `
-        -Location $settings.location -AllocationMethod Dynamic -DomainNameLabel $settings.$publicIPAddress
+        -Location $settings.location -AllocationMethod Dynamic -DomainNameLabel $settings.publicDNSPrefix
 }
 
 if ($false -eq $components.nicCardExists) {
@@ -272,8 +276,8 @@ if ($false -eq $components.nicCardExists) {
     $publicIPAddress = Get-AzPublicIpAddress -Name $settings.publicIPAddressName
 
     $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "UAGInterfaceConfig" -PublicIpAddress $publicIPAddress -Subnet $uagSubnet
-    $nicCard = New-AzNetworkInterface -Name "uagNIC" -ResourceGroupName $settings.resourceGroupName -Location $settings.location `
-        -IpConfiguration $interfaceConfig -NetworkSecurityGroupId $securityGroup.Id
+    $nicCard = New-AzNetworkInterface -Name $settings.uagNICName -ResourceGroupName $settings.resourceGroupName -Location `
+        $settings.location -IpConfiguration $interfaceConfig -NetworkSecurityGroupId $securityGroup.Id
 }
 
 # This function is needed to get all of the seed values for the VM.  This only gets called if the VM needs to be created
@@ -284,7 +288,7 @@ Function Get-Custom-Data {
 
     $vmSettings = "deploymentOption=" + $settings.deploymentOption + "`r`n"
     $vmSettings = $vmSettings + "rootPassword=" + $settings.rootPassword + "`r`n"
-    $vmSettings = $vmSettings + "adminPassword=" + $settings.adminPassword + "`r`n"
+    $vmSettings = $vmSettings + "adminPassword=" + $settings.uagPassword + "`r`n"
     $vmSettings = $vmSettings + "ipMode0=DHCPV4+DHCPV6`r`n"
 
     $emptyArray = @()
@@ -380,9 +384,9 @@ if ($false -eq $components.virtualMachineExists) {
     # Set the OS Parameters.  The custom data section is a bit of a black box right now
     $customData = Get-Custom-Data
     $customData = $customData.ToString()
-    $securePassword = ConvertTo-SecureString -String $settings.vmAdminPassword -AsPlainText -Force
+    $securePassword = ConvertTo-SecureString -String $settings.rootPassword -AsPlainText -Force
     $credentials = New-Object -TypeName System.Management.Automation.PSCredential `
-        -ArgumentList $settings.vmAdminUserName, $securePassword
+        -ArgumentList $settings.rootUserName, $securePassword
     $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Linux -ComputerName $settings.virtualMachineName `
         -Credential $credentials -CustomData $customData
 
