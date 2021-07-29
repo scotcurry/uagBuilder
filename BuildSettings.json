@@ -1,0 +1,18 @@
+{
+    "subscriptionID": "d8a86ded-b25e-48ff-873a-bf101b435edd",
+    "location": "northcentralus",
+    "resourceGroupName": "TunnelGroup",
+    "storageAccountName": "uagcontainer",
+    "storageContainerName": "vhdstore",
+    "vhdFileName": "euc-unified-access-gateway-21.06.0.0-18237595_OVF10.vhd",
+    "networkSecurityGroupName": "UAGSecurityGroup",
+    "virtualNetworkName": "UAGNetwork",
+    "subnetName": "UAGSubnet",
+    "publicIPAddressName": "UAGIPAddress",
+    "uagNICName": "uagNIC",
+    "virtualMachineName": "CurrywareUAG",
+    "publicDNSPrefix": "curryware-uag",
+    "vmSize": "Standard_A2_v2",
+    "vmAdminUserName": "uagadmin",
+    "vmAdminPassword": "AzureAirWatch1!"
+}

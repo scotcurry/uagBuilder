@@ -73,8 +73,8 @@ Function New-Resource-Group {
     $settingsContent = Get-Content -Path $jsonPath | Out-String 
     $settings = ConvertFrom-Json -InputObject $settingsContent
 
-    $resourceGroupName = $settings.resourceGroupName
     $location = $settings.location
+    $resourceGroupName = $settings.resourceGroupName
     $resourceGroup = Get-AzResourceGroup -Name $resourceGroupName -Location $location
     If ($null -eq $resourceGroup) {
         $resourceGroup = New-AzResourceGroup -Location $location -Name $resourceGroupName
@@ -217,7 +217,7 @@ Function Create-NIC {
         $uagSubnet = Get-AzVirtualNetworkSubnetConfig -Name $subnetName -VirtualNetwork $virtualNetwork
         $publicIPAddress = Get-AzPublicIpAddress -Name $publicIPName
 
-        $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "InterfaceConfig" -PublicIpAddress $publicIPAddress -Subnet $uagSubnet
+        $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "UAGInterfaceConfig" -PublicIpAddress $publicIPAddress -Subnet $uagSubnet
         $nicCard = New-AzNetworkInterface -Name "eth0" -ResourceGroupName $resourceGroupName -Location $location -IpConfiguration $interfaceConfig `
                     -NetworkSecurityGroupId $securityGroup.Id
     } Else {
@@ -349,7 +349,6 @@ Function Create-Virtual-Machine {
     $virtualMachineConfig = Add-AzVMNetworkInterface -VM $virtualMachineConfig -Id $nicCard.Id
 
     $virualMachine = New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroupName -Location $location -Verbose
-                        
 }
 
 # Main() - This is where the code actually starts.  It calls all of the functions above, with the exception of
