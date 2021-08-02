@@ -198,6 +198,16 @@ Function Get-Current-Environment-Info {
         $components.Add("virtualMachineExists", $true)
     }
 
+    Write-Info-Message ("*** Checking if Web Server VM Exists ***")
+    $virtualMachine = Get-AzVM -ResourceGroupName $resourceGroupName -Name $settings.webServerVMName -ErrorAction SilentlyContinue
+    if ($null -eq $virtualMachine) {
+        $components.Add("webServerExists", $false)
+        Write-Warning-Message ("Web Server Doesn't Exist")
+    } else {
+        $components.Add("webServerExists", $true)
+        Write-Info-Message ("Web Server Exists")
+    }
+
     return $components
 }
 
@@ -250,7 +260,7 @@ if ($false -eq $components.networkSecurityGroupExists) {
         $uagAdminRule = New-AzNetworkSecurityRuleConfig -Name uag-admin-rule -Description "UAG Admin" -Access Allow -Protocol Tcp -Direction Inbound `
             -Priority 105 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 9443
 
-        $nsg = New-AzNetworkSecurityGroup -ResourceGroupName $settings.resourceGroupName -Location $settings.location `
+        New-AzNetworkSecurityGroup -ResourceGroupName $settings.resourceGroupName -Location $settings.location `
             -Name $settings.networkSecurityGroupName -SecurityRules $httpsRule, $httpRule, $udpRule, $blastHttpRule, $blastUDPRule, $uagAdminRule
 }
 
@@ -391,6 +401,11 @@ if ($false -eq $components.virtualMachineExists) {
         -Credential $credentials -CustomData $customData
 
     # Actually build out the VM
-    $virualMachine = New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroup.ResourceGroupName `
+    New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroup.ResourceGroupName `
         -Location $settings.location -Verbose
+}
+
+if ($false -eq $components.webServerExists) {
+
+    
 }
