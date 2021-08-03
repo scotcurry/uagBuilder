@@ -1,7 +1,0 @@
-{
-    "subscriptionID": "d8a86ded-b25e-48ff-873a-bf101b435edd",
-    "resourceGroupName": "CurrywareDemo",
-    "securityGroupName": "CurrywareDemo-SG",
-    "location": "northcentralus",
-    "vmname": "CurrywareDemo"
-}

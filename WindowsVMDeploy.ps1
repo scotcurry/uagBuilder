@@ -13,14 +13,14 @@
 Function Write-Error-Message {
     
     Param ($message)
-	Write-Host $message -foregroundcolor Red -backgroundcolor Black
+	Write-Host $message -ForegroundColor Red -BackgroundColor Black
 }
 
 # This function provides the Information strings.  Things like where you are in the process.
 Function Write-Warning-Message {
 
     Param ($message)
-	Write-Host $message -foregroundcolor Yellow -backgroundcolor Black
+	Write-Host $message -ForegroundColor Yellow -BackgroundColor Black
 }
 
 Function Write-Info-Message {
@@ -31,21 +31,22 @@ Function Write-Info-Message {
 
 # This code just checks to make sure that all of the Azure Powershell Modules are on the system.
 Function Find-AzureModules {
+
     Write-Info-Message ("*** Checking Azure Powershell Modules ***")
     If (-not (Get-InstalledModule -Name "Az")) {
-        Write_Error_Message "Module Az Not Installed!"
-        Write_Error_Message "Run (Install-Module -Name Az -AllowClobber -Scope AllUsers) as Administrator"
-        Write_Error_Message "Then Run (Uninstall-AzureRM) as Administrator, might not do anything but cleans up old method"
+        Write-Error-Message "Module Az Not Installed!"
+        Write-Error-Message "Run (Install-Module -Name Az -AllowClobber -Scope AllUsers) as Administrator"
+        Write-Error-Message "Then Run (Uninstall-AzureRM) as Administrator, might not do anything but cleans up old method"
+        Exit
     }
 }
 
-# Get the settings to run this script from a file called UAGSettings.json
 Function Get-Settings {
 
     Write-Info-Message ("Getting Settings")
     #Check if the UAGSettings.json exists
     $scriptFolder = $PSScriptRoot
-    $jsonPath = $scriptFolder + "\BuildSettings.json"
+    $jsonPath = $scriptFolder + "\WindowsVMSettings.json"
     If (-not (Test-Path -Path $jsonPath)) {
         Write_Error_Message "Didn't find UAGSettings.json in path ($jsonPath)"
         Exit
@@ -66,15 +67,14 @@ Function Connect-To-Azure {
 
     $connected = Get-AzSubscription -SubscriptionId $settings.subscriptionID -WarningVariable $errorConnecting -WarningAction Continue
     If ($null -eq $connected) {
-        $connected = Connect-AzAccount -Subscription $settings["subscriptionID"]
+        $connected = Connect-AzAccount -Subscription $settings.subscriptionID -TenantId "945c199a-83a2-4e80-9f8c-5a91be5752dd"
     }
     if ($null -eq $connected) {
-        Write-Error-Message ("Failure Connecting to Azure with ID : " + $settings["subscriptionID"])
+        Write-Error-Message ("Failure Connecting to Azure with ID : " + $settings.subscriptionID)
     }
     $tenantID = (Get-AzContext).Tenant.Id
     Write-Info-Message "Connected to Azure Tenant $tenantID"
 }
-
 
 Function Get-Current-Environment-Info {
 
@@ -103,31 +103,6 @@ Function Get-Current-Environment-Info {
     } else {
         $components.Add("storageAccountExists", $true)
         Write-Info-Message ("Storage Account $storageAccountName Exists")
-        $storageContext = $storageAccount.Context
-    }
-
-    Write-Info-Message ("*** Checking Storage Container ***")
-    if ($null -eq $storageContext) {
-        Write-Warning-Message ("Storage Container Needs to be Built - No Context")
-    } else {
-        $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
-        if ($null -eq $storageContainer) {
-            $components.Add("storageContainerExists", $false)
-            Write-Warning-Message ("Storage Container Needs to be Built - No Container")
-        } else {
-            Write-Info-Message ("Storage Container Exists")
-            $components.Add("storageContainerExists", $true)
-        }
-    }
-
-    Write-Info-Message ("*** Checking Storage Blob ***")
-    $vhdBlob = Get-AzStorageBlob -Context $storageContext -Container $storageContainer.Name -Blob $settings.vhdFileName
-    if ($null -eq $vhdBlob) {
-        $components.Add("storageBlobExists", $false)
-        Write-Warning-Message ("Storage Blob Doesn't Exist - Needs to be Uploaded")
-    } else {
-        $components.Add("storageBlobExists", $true)
-        Write-Info-Message ("Storage Blob Exists")
     }
 
     Write-Info-Message ("*** Checking Security Group ***")
@@ -167,27 +142,17 @@ Function Get-Current-Environment-Info {
         }
     }
 
-    Write-Info-Message ("*** Checking Public IP Address ***")
-    $publicIPAddress = Get-AzPublicIpAddress -Name $settings.publicIPAddressName -ResourceGroupName $resourceGroupName
-    if ($null -eq $publicIPAddress) {
-        $components.Add("publicIPAddressExists", $false)
-        Write-Warning-Message ("Public IP Address Doesn't Exist")
-    } else {
-        Write-Info-Message ("Public IP Address Exists")
-        $components.Add("publicIPAddressExists", $true)
-    }
-
-    Write-Info-Message ("*** Checking UAG Nic Card ***")
-    $nicCard = Get-AzNetworkInterface -ResourceGroupName $resourceGroupName -Name $settings.uagNICName -ErrorAction Continue
+    Write-Info-Message ("*** Checking WinVM Nic Card ***")
+    $nicCard = Get-AzNetworkInterface -ResourceGroupName $resourceGroupName -Name $settings.winVMNICName -ErrorAction Continue
     if ($null -eq $nicCard) {
         $components.Add("nicCardExists", $false)
-        Write-Warning-Message ("UAG NIC Card Doesn't Exist")
+        Write-Warning-Message ("WinVM NIC Card Doesn't Exist")
     } else {
         $components.Add("nicCardExists", $true)
-        Write-Info-Message("UAG NIC Card Exists")
+        Write-Info-Message("WinVM NIC Card Exists")
     }
 
-    Write-Info-Message ("*** Checking if UAG VM Exists ***")
+    Write-Info-Message ("*** Checking if Windows VM Exists ***")
     $virtualMachine = Get-AzVM -ResourceGroupName $resourceGroupName -Name $settings.virtualMachineName -ErrorAction SilentlyContinue `
         -ErrorVariable $noVirtualMachine
     if ($null -eq $virtualMachine) {
@@ -198,25 +163,24 @@ Function Get-Current-Environment-Info {
         $components.Add("virtualMachineExists", $true)
     }
 
-    Write-Info-Message ("*** Checking if Web Server VM Exists ***")
-    $virtualMachine = Get-AzVM -ResourceGroupName $resourceGroupName -Name $settings.webServerVMName -ErrorAction SilentlyContinue
-    if ($null -eq $virtualMachine) {
-        $components.Add("webServerExists", $false)
-        Write-Warning-Message ("Web Server Doesn't Exist")
-    } else {
-        $components.Add("webServerExists", $true)
-        Write-Info-Message ("Web Server Exists")
-    }
-
     return $components
 }
 
-$settings = Get-Settings
+
+# Main() - This is where the code actually starts.  It calls all of the functions above, with the exception of
+Write-Info-Message "Validating Installed Modules"
 Find-AzureModules
 
+# All settings are in a JSON file.  This call retrieves them.
+Write-Info-Message "Getting Settings"
+$settings = Get-Settings
+
+Write-Info-Message "Connecting to Azure"
 Connect-To-Azure($settings)
+
 $components = Get-Current-Environment-Info($settings)
 
+Write-Info-Message ("ResourceGroupExists $components.resourceGroupExists")
 if ($false -eq $components.resourceGroupExists) {
     $resourceGroup = New-AzResourceGroup -Location $settings.location -Name $settings.resourceGroupName
 }
@@ -230,14 +194,7 @@ if ($false -eq $components.storageAccountExists) {
 }
 
 if ($false -eq $components.storageContainerExists) {
-    $storageContainer = New-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
-}
-
-if ($false -eq $components.storageBlobExists) {
-    $blobContainerBase = $storageContext.BlobEndPoint
-    $destinationFile = $blobContainerBase + $settings.storageContainerName + "/" + $settings.vhdFileName
-    Add-AzVhd -ResourceGroupName $settings.resourceGroupName -LocalFilePath $settings.uagLocalFile `
-            -Destination $destinationFile
+    New-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
 }
 
 if ($false -eq $components.networkSecurityGroupExists) {
@@ -274,88 +231,16 @@ if ($false -eq $components.virtualNetworkExists) {
      -Name $settings.virtualNetworkName -AddressPrefix 10.0.0.0/16 -Subnet $networkSubnet
 }
 
-if ($false -eq $components.publicIPAddressExists) {
-    $publicIPAddress = New-AzPublicIpAddress -Name $settings.publicIPAddressName -ResourceGroupName $settings.resourceGroupName `
-        -Location $settings.location -AllocationMethod Dynamic -DomainNameLabel $settings.publicDNSPrefix
-}
-
 if ($false -eq $components.nicCardExists) {
     $virtualNetwork = Get-AzVirtualNetwork -Name $settings.virtualNetworkName
     $securityGroup = Get-AzNetworkSecurityGroup -Name $settings.networkSecurityGroupName
     $uagSubnet = Get-AzVirtualNetworkSubnetConfig -Name $settings.subnetName -VirtualNetwork $virtualNetwork
-    $publicIPAddress = Get-AzPublicIpAddress -Name $settings.publicIPAddressName
 
-    $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "UAGInterfaceConfig" -PublicIpAddress $publicIPAddress -Subnet $uagSubnet
-    $nicCard = New-AzNetworkInterface -Name $settings.uagNICName -ResourceGroupName $settings.resourceGroupName -Location `
+    $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "WinVMInterfaceConfig" -Subnet $uagSubnet
+    $nicCard = New-AzNetworkInterface -Name $settings.winVMNICName -ResourceGroupName $settings.resourceGroupName -Location `
         $settings.location -IpConfiguration $interfaceConfig -NetworkSecurityGroupId $securityGroup.Id
 }
 
-# This function is needed to get all of the seed values for the VM.  This only gets called if the VM needs to be created
-Function Get-Custom-Data {
-
-    [OutputType("System.String")]
-    $settings = Get-Settings
-
-    $vmSettings = "deploymentOption=" + $settings.deploymentOption + "`r`n"
-    $vmSettings = $vmSettings + "rootPassword=" + $settings.rootPassword + "`r`n"
-    $vmSettings = $vmSettings + "adminPassword=" + $settings.uagPassword + "`r`n"
-    $vmSettings = $vmSettings + "ipMode0=DHCPV4+DHCPV6`r`n"
-
-    $emptyArray = @()
-    $kerbKeyTabSettings = [PSCustomObject]@{
-        kerberosKeyTabSettings = $emptyArray
-    }
-
-    $kerberosRealmSettingsListArray = [PSCustomObject]@{
-        kerberosRealmSettingsList = $emptyArray 
-    }
-
-    $idPExternalMetadataSettingsListArray = [PSCustomObject]@{
-        idPExternalMetadataSettingsList = $emptyArray
-    }
-
-    $edgeServiceSettingsListArray = [PSCustomObject]@{
-        edgeServiceSettingsList = $emptyArray
-    }
-
-    $settingsObject = [PSCustomObject]@{
-        locale = "en_US"
-        ssl30Enabled = "false"
-        tls10Enabled = "false"
-        tls11Enabled = "false"
-        tls12Enabled = "true"
-        tls13Enabled = "true"
-        sysLogType = "UDP"
-    }
-
-    $authMethodSettingsListArray = [PSCustomObject]@{
-        authMethodSettingsList = $emptyArray
-    }
-
-    $serviceProviderMetadataListArray = [PSCustomObject]@{
-        items = $emptyArray
-    }
-
-    $allSettingsJSON = [PSCustomObject]@{
-        kerberosKeyTabSettingsList = $kerbKeyTabSettings
-        kerberosRealmSettingsList = $kerberosRealmSettingsListArray
-        idPExternalMetadataSettingsList = $idPExternalMetadataSettingsListArray
-        edgeServiceSettingsList = $edgeServiceSettingsListArray
-        systemSettings = $settingsObject
-        authMethodSettingsList = $authMethodSettingsListArray
-        serviceProviderMetadataList = $serviceProviderMetadataListArray
-        identityProviderMetaData = @{}
-    }
-
-    $settingsJSONString = ConvertTo-Json -InputObject $allSettingsJSON -Compress
-    $jsonForSettings = $settingsJSONString.Replace("`"", "\`"")
-
-    $vmSettings = $vmSettings + "settingsJSON=" + $jsonForSettings + "`r`n"
-    $base64Settings = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes($vmSettings))
-    return $base64Settings
-}
-
-# This is built to validate that all of the components above exist and builds the VM.
 if ($false -eq $components.virtualMachineExists) {
 
     # Get all of the storage portions ready.
@@ -363,15 +248,7 @@ if ($false -eq $components.virtualMachineExists) {
     Write-Info-Message ("Resource Group Name: " + $resourceGroup.ResourceGroupName)
     $storageAccount = Get-AzStorageAccount -ResourceGroupName $resourceGroup.ResourceGroupName -Name $settings.storageAccountName
     $storageContext = $storageAccount.Context
-    $blobEndpoint = $storageAccount.PrimaryEndpoints.Blob
-    Write-Info-Message("Storage Blob Endpoint: " + $blobEndpoint)
-    $storageContainer = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageContext
-    Write-Info-Message ("Storage Container: " + $storageContainer.Name)
-    $storageBlob = Get-AzStorageBlob -Container $settings.storageContainerName -Context $storageAccount.Context `
-        -Blob $settings.vhdFileName
-    $storageBlobURI = $storageBlob.BlobClient.Uri
-    Write-Info-Message ("Storage Blob URI: " + $storageBlobURI)
-    $oldDiskExists = Get-AzStorageBlob -Container $settings.storageContainerName -Context $storageContext -Blob "osDisk.vhd" `
+    $oldDiskExists = Get-AzStorageBlob -Container $settings.storageContainerName -Context $storageContext -Blob "winvmosDisk.vhd" `
         -ErrorAction SilentlyContinue -ErrorVariable $noOldDisk
     if ($null -ne $oldDiskExists) {
         Write-Warning-Message ("Deleting Old OS Disk")
@@ -382,18 +259,15 @@ if ($false -eq $components.virtualMachineExists) {
     $virtualMachineConfig = New-AzVMConfig -VMName $settings.virtualMachineName -VMSize $settings.vmSize
 
     # Add the NIC Card
-    $nicCard = Get-AzNetworkInterface -ResourceGroupName $resourceGroup.ResourceGroupName -Name $settings.uagNICName
+    $nicCard = Get-AzNetworkInterface -ResourceGroupName $resourceGroup.ResourceGroupName -Name $settings.winVMNICName
     Write-Info-Message ("Using NIC Card: " + $nicCard.ID)
     $virtualMachineConfig = Add-AzVMNetworkInterface -VM $virtualMachineConfig -Id $nicCard.Id
 
     # Build out the disk information - hard coding the OS disk for easy cleanup.
-    $destinationURI = $blobEndpoint + $storageContainer.Name + "/osDisk.vhd"
     $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -VhdUri $destinationURI -SourceImageUri $storageBlobURI `
         -Linux -CreateOption FromImage -Name "UAGOSDisk"
 
     # Set the OS Parameters.  The custom data section is a bit of a black box right now
-    $customData = Get-Custom-Data
-    $customData = $customData.ToString()
     $securePassword = ConvertTo-SecureString -String $settings.rootPassword -AsPlainText -Force
     $credentials = New-Object -TypeName System.Management.Automation.PSCredential `
         -ArgumentList $settings.rootUserName, $securePassword
@@ -403,9 +277,4 @@ if ($false -eq $components.virtualMachineExists) {
     # Actually build out the VM
     New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroup.ResourceGroupName `
         -Location $settings.location -Verbose
-}
-
-if ($false -eq $components.webServerExists) {
-
-    
 }

@@ -1,0 +1,15 @@
+{
+    "subscriptionID": "d8a86ded-b25e-48ff-873a-bf101b435edd",
+    "location": "northcentralus",
+    "resourceGroupName": "TunnelGroup",
+    "storageAccountName": "uagcontainer",
+    "storageContainerName": "vhdstore",
+    "networkSecurityGroupName": "UAGSecurityGroup",
+    "virtualNetworkName": "UAGNetwork",
+    "subnetName": "UAGSubnet",
+    "winVMNICName": "winVMNIC",
+    "virtualMachineName": "CurrywareWinVM",
+    "winVMSize": "Standard_B2ms",
+    "winVMUserName": "WinAdmin",
+    "winVMPassword": "AzureAirWatch1!"
+}

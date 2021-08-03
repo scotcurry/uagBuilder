@@ -15,8 +15,5 @@
     "publicDNSPrefix": "curryware-uag",
     "vmSize": "Standard_A2_v2",
     "rootPassword": "AzureAirWatch1!",
-    "rootUserName": "vmadmin",
-    "uagPassword": "AzureAirWatch1!",
-    "webVMSize": "Standard_B2ms",
-    "webServerVMName": "CurrywareWeb"
+    "rootUserName": "vmadmin"
 }
