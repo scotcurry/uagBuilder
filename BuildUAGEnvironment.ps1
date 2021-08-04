@@ -294,8 +294,8 @@ Function Get-Custom-Data {
     $settings = Get-Settings
 
     $vmSettings = "deploymentOption=" + $settings.deploymentOption + "`r`n"
-    $vmSettings = $vmSettings + "rootPassword=" + $settings.rootPassword + "`r`n"
-    $vmSettings = $vmSettings + "adminPassword=" + $settings.uagPassword + "`r`n"
+    $vmSettings = $vmSettings + "rootPassword=" + $settings.rootUserName + "`r`n"
+    $vmSettings = $vmSettings + "adminPassword=" + $settings.adminPassword + "`r`n"
     $vmSettings = $vmSettings + "ipMode0=DHCPV4+DHCPV6`r`n"
 
     $emptyArray = @()
@@ -368,7 +368,7 @@ if ($false -eq $components.virtualMachineExists) {
         -Blob $settings.vhdFileName
     $storageBlobURI = $storageBlob.BlobClient.Uri
     Write-Info-Message ("Storage Blob URI: " + $storageBlobURI)
-    $oldDiskExists = Get-AzStorageBlob -Container $settings.storageContainerName -Context $storageContext -Blob "winvmosDisk.vhd" `
+    $oldDiskExists = Get-AzStorageBlob -Container $settings.storageContainerName -Context $storageContext -Blob "osDisk.vhd" `
         -ErrorAction SilentlyContinue -ErrorVariable $noOldDisk
     if ($null -ne $oldDiskExists) {
         Write-Warning-Message ("Deleting Old OS Disk")
