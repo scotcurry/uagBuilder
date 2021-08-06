@@ -89,10 +89,10 @@ Function Get-Current-Environment-Info {
     $resourceGroup = Get-AzResourceGroup -Name $resourceGroupName -Location $location
     If ($null -eq $resourceGroup) {
         Write-Warning-Message ("Resource Group Needs to be Built: " + $resourceGroupName)
-        $components.Add("resouceGroupExists", $false)
+        $components.Add("resourceGroupExists", $false)
     } else {
         Write-Info-Message "Resource Group $resourceGroupName Exists!"
-        $components.Add("resouceGroupExists", $true)
+        $components.Add("resourceGroupExists", $true)
     }
 
     Write-Info-Message ("*** Checking Storage Account ***")
@@ -256,25 +256,32 @@ if ($false -eq $components.virtualMachineExists) {
     }
 
     # Start building out the VM
-    $virtualMachineConfig = New-AzVMConfig -VMName $settings.virtualMachineName -VMSize $settings.vmSize
+    $virtualMachineConfig = New-AzVMConfig -VMName $settings.virtualMachineName -VMSize $settings.winVMSize `
 
     # Add the NIC Card
     $nicCard = Get-AzNetworkInterface -ResourceGroupName $resourceGroup.ResourceGroupName -Name $settings.winVMNICName
     Write-Info-Message ("Using NIC Card: " + $nicCard.ID)
     $virtualMachineConfig = Add-AzVMNetworkInterface -VM $virtualMachineConfig -Id $nicCard.Id
 
-    # Build out the disk information - hard coding the OS disk for easy cleanup.
-    $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -VhdUri $destinationURI -SourceImageUri $storageBlobURI `
-        -Linux -CreateOption FromImage -Name "UAGOSDisk"
-
     # Set the OS Parameters.  The custom data section is a bit of a black box right now
-    $securePassword = ConvertTo-SecureString -String $settings.rootPassword -AsPlainText -Force
+    $securePassword = ConvertTo-SecureString -String $settings.winVMPassword -AsPlainText -Force
     $credentials = New-Object -TypeName System.Management.Automation.PSCredential `
-        -ArgumentList $settings.rootUserName, $securePassword
-    $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Linux -ComputerName $settings.virtualMachineName `
-        -Credential $credentials -CustomData $customData
+        -ArgumentList $settings.winVMUserName, $securePassword
+    $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Windows -ComputerName $settings.virtualMachineName `
+        -Credential $credentials -EnableAutoUpdate
+    $storageBlob = Get-AzStorageContainer -Name $settings.storageContainerName -Context $storageAccount.Context
+    $storageBlobURI = $storageBlob.Context.BlobEndPoint + $settings.storageAccountName
+    Write-Error-Message $storageBlobURI
 
+    # To build out the vm you need a source image, VM operating system
+    $virtualMachineConfig = Set-AzVMSourceImage -VM $virtualMachineConfig -PublisherName "MicrosoftWindowsServer" `
+        -Offer "WindowsServer" -Skus "2019-Datacenter" -Version "latest"
+    $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Windows -ComputerName $settings.virtualMachineName `
+        -Credential $credentials
+    $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -CreateOption "FromImage" -Name "win_osdisk" `
+        -StorageAccountType "Standard_LRS"
     # Actually build out the VM
+    
     New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroup.ResourceGroupName `
-        -Location $settings.location -Verbose
+       -Location $settings.location -Verbose 
 }

@@ -10,6 +10,8 @@
     "winVMNICName": "winVMNIC",
     "virtualMachineName": "CurrywareWinVM",
     "winVMSize": "Standard_B2ms",
+    "windowsOSSku": "2016-Datacenter-smalldisk",
+    "winVMName": "winOSDisk",
     "winVMUserName": "WinAdmin",
     "winVMPassword": "AzureAirWatch1!"
 }
