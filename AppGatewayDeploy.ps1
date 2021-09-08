@@ -75,7 +75,6 @@ Function New-Resource-Group {
     }
 }
 
-
 Function Add-Gateway-VNET {
 
     Set-Item Env:\SuppressAzurePowerShellBreakingChangeWarnings "true"
@@ -85,7 +84,7 @@ Function Add-Gateway-VNET {
 
     Write-Info-Message ("Front End Name: " + $settings.appgatewaySubnetName)
     $accessGatewaySubnetList = New-Object Collections.Generic.List[string]
-    $accessGatewaySubnetList.Add("10.1.0.0/24")
+    $accessGatewaySubnetList.Add(10.1.0.0/24)
     foreach($currentSubnet in $accessGatewaySubnetList) {
         Write-Output $currentSubnet
     }

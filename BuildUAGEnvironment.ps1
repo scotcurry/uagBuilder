@@ -256,9 +256,14 @@ if ($false -eq $components.networkSecurityGroupExists) {
 
         $uagAdminRule = New-AzNetworkSecurityRuleConfig -Name uag-admin-rule -Description "UAG Admin" -Access Allow -Protocol Tcp -Direction Inbound `
             -Priority 105 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 9443
+        
+        $rdpRule = New-AzNetworkSecurityRuleConfig -Name rdp-rule -Description "Allow RDP" -Access Allow -Protocol Tcp `
+            -Direction Inbound -Priority 106 -SourceAddressPrefix $settings.localIPAddress -SourcePortRange 3389 `
+            -DestinationAddressPrefix * -DestinationPortRange 3389
 
         New-AzNetworkSecurityGroup -ResourceGroupName $settings.resourceGroupName -Location $settings.location `
-            -Name $settings.networkSecurityGroupName -SecurityRules $httpsRule, $httpRule, $udpRule, $blastHttpRule, $blastUDPRule, $uagAdminRule
+            -Name $settings.networkSecurityGroupName -SecurityRules $httpsRule, $httpRule, $udpRule, $blastHttpRule, `
+            $blastUDPRule, $uagAdminRule, $rdpRule
 }
 
 if ($false -eq $components.virtualSubnetExists) {

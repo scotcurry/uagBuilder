@@ -1,9 +1,9 @@
 {
     "subscriptionID": "d8a86ded-b25e-48ff-873a-bf101b435edd",
-    "resourceGroupName": "CurrywareFF",
+    "resourceGroupName": "currywareff",
     "location": "northcentralus",
     "appgatewaySubnetName": "appgatewaySubnet",
     "backendSubnetName": "backendSubnet",
-    "virtualNetworkName": "currywareFFVNet",
-    "publicIPAddressName": "currywareFFPublicIP"
+    "virtualNetworkName": "currywareffVNet",
+    "publicIPAddressName": "currywareffPublicIP"
 }

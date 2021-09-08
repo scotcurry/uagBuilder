@@ -7,6 +7,8 @@
     "networkSecurityGroupName": "UAGSecurityGroup",
     "virtualNetworkName": "UAGNetwork",
     "subnetName": "UAGSubnet",
+    "publicDNSPrefix": "curryware-win",
+    "publicIPAddressName": "accIPAddress",
     "winVMNICName": "winVMNIC",
     "virtualMachineName": "CurrywareWinVM",
     "winVMSize": "Standard_B2ms",

@@ -16,5 +16,6 @@
     "vmSize": "Standard_A2_v2",
     "rootUserName": "uagadmin",
     "rootPassword": "AzureAirWatch1!",
-    "adminPassword": "AzureAirWatch1!"
+    "adminPassword": "AzureAirWatch1!",
+    "localIPAddress": "68.43.210.2"
 }

@@ -1,3 +1,6 @@
+<# IMPORTANT NOTE: For some reason RDP does seem to work right after the VM is deployed.  Go to 
+    RDP troubleshooting and there is an option to rebuild VM which seemed to solve the issue. #>
+
 <#
     This is a set of functions -- Search for Main() to see where the code actually starts.
 #>
@@ -142,6 +145,16 @@ Function Get-Current-Environment-Info {
         }
     }
 
+    Write-Info-Message ("*** Checking Public IP Address ***")
+    $publicIPAddress = Get-AzPublicIpAddress -Name $settings.publicIPAddressName -ResourceGroupName $resourceGroupName
+    if ($null -eq $publicIPAddress) {
+        $components.Add("publicIPAddressExists", $false)
+        Write-Warning-Message ("Public IP Address Doesn't Exist")
+    } else {
+        Write-Info-Message ("Public IP Address Exists")
+        $components.Add("publicIPAddressExists", $true)
+    }
+
     Write-Info-Message ("*** Checking WinVM Nic Card ***")
     $nicCard = Get-AzNetworkInterface -ResourceGroupName $resourceGroupName -Name $settings.winVMNICName -ErrorAction Continue
     if ($null -eq $nicCard) {
@@ -204,21 +217,28 @@ if ($false -eq $components.networkSecurityGroupExists) {
     $udpRule = New-AzNetworkSecurityRuleConfig -Name udp-rule -Description "Allow UDP 443" -Access Allow -Protocol Udp -Direction Inbound `
             -Priority 101 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 443
  
+    $httpRule = New-AzNetworkSecurityRuleConfig -Name http-rule -Description "Allow HTTP" -Access Allow -Protocol Tcp -Direction Inbound `
+        -Priority 102 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 80
 
-        $httpRule = New-AzNetworkSecurityRuleConfig -Name http-rule -Description "Allow HTTP" -Access Allow -Protocol Tcp -Direction Inbound `
-            -Priority 102 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 80
+    $blastHttpRule = New-AzNetworkSecurityRuleConfig -Name http-blast-rule -Description "Allow Blast" -Access Allow -Protocol Tcp -Direction Inbound `
+        -Priority 103 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
 
-        $blastHttpRule = New-AzNetworkSecurityRuleConfig -Name http-blast-rule -Description "Allow Blast" -Access Allow -Protocol Tcp -Direction Inbound `
-            -Priority 103 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
+    $blastUDPRule = New-AzNetworkSecurityRuleConfig -Name udp-blast-rule -Description "Allow Blast" -Access Allow -Protocol Udp -Direction Inbound `
+        -Priority 104 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
 
-        $blastUDPRule = New-AzNetworkSecurityRuleConfig -Name udp-blast-rule -Description "Allow Blast" -Access Allow -Protocol Udp -Direction Inbound `
-            -Priority 104 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 8443
+    $uagAdminRule = New-AzNetworkSecurityRuleConfig -Name uag-admin-rule -Description "UAG Admin" -Access Allow -Protocol Tcp -Direction Inbound `
+        -Priority 105 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 9443
 
-        $uagAdminRule = New-AzNetworkSecurityRuleConfig -Name uag-admin-rule -Description "UAG Admin" -Access Allow -Protocol Tcp -Direction Inbound `
-            -Priority 105 -SourceAddressPrefix * -SourcePortRange * -DestinationAddressPrefix * -DestinationPortRange 9443
+    $rdpRule = New-AzNetworkSecurityRuleConfig -Name rdp-rul -Description "Allow RDP 3389" -Access Allow -Protocol Tcp -Direction Inbound `
+        -Priority 106 -SourceAddressPrefix * -SourcePortRange 3389 -DestinationAddressPrefix * -DestinationPortRange 3389
 
         New-AzNetworkSecurityGroup -ResourceGroupName $settings.resourceGroupName -Location $settings.location `
             -Name $settings.networkSecurityGroupName -SecurityRules $httpsRule, $httpRule, $udpRule, $blastHttpRule, $blastUDPRule, $uagAdminRule
+}
+
+if ($false -eq $components.publicIPAddressExists) {
+    $publicIPAddress = New-AzPublicIpAddress -Name $settings.publicIPAddressName -ResourceGroupName $settings.resourceGroupName `
+        -Location $settings.location -AllocationMethod Dynamic -DomainNameLabel $settings.publicDNSPrefix
 }
 
 if ($false -eq $components.virtualSubnetExists) {
@@ -236,7 +256,8 @@ if ($false -eq $components.nicCardExists) {
     $securityGroup = Get-AzNetworkSecurityGroup -Name $settings.networkSecurityGroupName
     $uagSubnet = Get-AzVirtualNetworkSubnetConfig -Name $settings.subnetName -VirtualNetwork $virtualNetwork
 
-    $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "WinVMInterfaceConfig" -Subnet $uagSubnet
+    $interfaceConfig = New-AzNetworkInterfaceIpConfig -Name "WinVMInterfaceConfig" -Subnet $uagSubnet `
+        -PublicIpAddress $publicIPAddress
     $nicCard = New-AzNetworkInterface -Name $settings.winVMNICName -ResourceGroupName $settings.resourceGroupName -Location `
         $settings.location -IpConfiguration $interfaceConfig -NetworkSecurityGroupId $securityGroup.Id
 }
@@ -279,7 +300,7 @@ if ($false -eq $components.virtualMachineExists) {
     $virtualMachineConfig = Set-AzVMOperatingSystem -VM $virtualMachineConfig -Windows -ComputerName $settings.virtualMachineName `
         -Credential $credentials
     $virtualMachineConfig = Set-AzVMOSDisk -VM $virtualMachineConfig -CreateOption "FromImage" -Name "win_osdisk" `
-        -StorageAccountType "Standard_LRS"
+        -StorageAccountType "StandardSSD_LRS"
     # Actually build out the VM
     
     New-AzVM -VM $virtualMachineConfig -ResourceGroupName $resourceGroup.ResourceGroupName `
